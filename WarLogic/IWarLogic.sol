@@ -8,4 +8,5 @@ interface IWarLogic {
 	function getCastleCitizens(uint256 castleId) external view returns (uint256[] memory);
 	function allocateCitizen(uint256 castleId, uint256 citizenId) external;
 	function deallocateCitizen(uint256 castleId, uint256 citizenId) external;
+	function deallocateAllCitizens(uint256 castleId) external;
 }

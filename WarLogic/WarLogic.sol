@@ -3,6 +3,7 @@ pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import "@openzeppelin/contracts/utils/Strings.sol";
 
 import "../WarCastleDetails.sol";
 import "../WarCastle/IWarCastleToken.sol";
@@ -75,8 +76,11 @@ contract WarLogic is AccessControlUpgradeable, UUPSUpgradeable, IWarLogic {
     }
 
     function deallocateCitizen(uint256 castleId, uint256 citizenId) public {
-        require(contract_castle.isOwnerOf(msg.sender, castleId), "Castle not owned by sender");
-        require(contract_citizen.isOwnerOf(msg.sender, citizenId), "Citizen not owned by sender");
+        // Release OpenSea proxy to deallocate when trade
+        if (msg.sender != address(contract_castle) && msg.sender != address(contract_citizen)) {
+            require(contract_castle.isOwnerOf(msg.sender, castleId), string.concat("Castle not owned by sender ", Strings.toHexString(msg.sender)));
+            require(contract_citizen.isOwnerOf(msg.sender, citizenId), string.concat("Citizen not owned by sender ", Strings.toHexString(msg.sender)));
+        }
 
         uint256 baseDetails = contract_castle.getTokenDetails(castleId);
 
@@ -91,8 +95,23 @@ contract WarLogic is AccessControlUpgradeable, UUPSUpgradeable, IWarLogic {
                 newData.push(citizenId);
             }
         }
+        // Clear the castle citizens array
         delete castle_citizens[castleId];
         castle_citizens[castleId] = newData;
+
+        // Clear the citizen castle array
+        delete citizens_castle[citizenId];
+    }
+
+    function deallocateAllCitizens(uint256 castleId) public {
+        // Release OpenSea proxy to deallocate when trade
+        if (msg.sender != address(contract_castle) && msg.sender != address(contract_citizen)) {
+            require(contract_castle.isOwnerOf(msg.sender, castleId), string.concat("Castle not owned by sender ", Strings.toHexString(msg.sender)));
+        }
+        for (uint256 index = 0; index < castle_citizens[castleId].length; index++) {
+            delete citizens_castle[castle_citizens[castleId][index]];
+        }
+        delete castle_citizens[castleId];
     }
 
 	function _authorizeUpgrade(address newImplementation) internal override onlyRole(UPGRADER_ROLE) {}

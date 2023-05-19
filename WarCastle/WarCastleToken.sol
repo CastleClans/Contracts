@@ -12,6 +12,7 @@ import "../IERC20Burnable.sol";
 import "../WarCastleDetails.sol";
 import "../GameDesign/IWarDesign.sol";
 import "../ContextMixin.sol";
+import "../WarLogic/IWarLogic.sol";
 
 contract WarCastleToken is ERC721Upgradeable, AccessControlUpgradeable, PausableUpgradeable, ContextMixin {
 	struct CreateTokenRequest {
@@ -51,6 +52,7 @@ contract WarCastleToken is ERC721Upgradeable, AccessControlUpgradeable, Pausable
 	mapping(address => CreateTokenRequest[]) public tokenRequests;
 
 	IWarDesign public design;
+	IWarLogic public logic;
 
 	constructor(IERC20Burnable coinToken_) {
 		coinToken = coinToken_;
@@ -137,6 +139,11 @@ contract WarCastleToken is ERC721Upgradeable, AccessControlUpgradeable, Pausable
 	/** Sets the design. */
 	function setDesign(address contractAddress) external onlyRole(DESIGNER_ROLE) {
 		design = IWarDesign(contractAddress);
+	}
+
+	/** Sets the logic contract. */
+	function setLogic(address contractAddress) external onlyRole(DESIGNER_ROLE) {
+		logic = IWarLogic(contractAddress);
 	}
 
 	/** Returns if address if owner of tokenId */
@@ -283,6 +290,13 @@ contract WarCastleToken is ERC721Upgradeable, AccessControlUpgradeable, Pausable
 		super._beforeTokenTransfer(from, to, tokenId, batchSize);
 		// Not minting, burn or transfer
 		if (from != address(0)) {
+			// Check if citizen is inside a castle and deallocate
+			uint256[] memory citizensIds = logic.getCastleCitizens(tokenId);
+			if (citizensIds.length > 0) {
+				logic.deallocateAllCitizens(tokenId);
+			}
+			
+			// Decrement the owner token counter
 			_ownedTokensCount[from].decrement();
 		}
 		if (to == address(0)) {

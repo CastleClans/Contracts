@@ -12,6 +12,7 @@ import "../IERC20Burnable.sol";
 import "../WarCitizenDetails.sol";
 import "../GameDesign/IWarDesign.sol";
 import "../ContextMixin.sol";
+import "../WarLogic/IWarLogic.sol";
 
 contract WarCitizenToken is ERC721Upgradeable, AccessControlUpgradeable, PausableUpgradeable, ContextMixin {
 	struct CreateTokenRequest {
@@ -51,6 +52,7 @@ contract WarCitizenToken is ERC721Upgradeable, AccessControlUpgradeable, Pausabl
 	mapping(address => CreateTokenRequest[]) public tokenRequests;
 
 	IWarDesign public design;
+	IWarLogic public logic;
 
 	constructor(IERC20Burnable coinToken_) {
 		coinToken = coinToken_;
@@ -68,6 +70,8 @@ contract WarCitizenToken is ERC721Upgradeable, AccessControlUpgradeable, Pausabl
 		_setupRole(CLAIMER_ROLE, msg.sender);
 		_setupRole(BURNER_ROLE, msg.sender);
 		_setupRole(TRADER_ROLE, msg.sender);
+
+		tokenIdCounter.increment(); // Skip token 0, so we can check ownership from logic contract
 	}
 
 	function isApprovedForAll(address _owner, address _operator) public override view returns (bool isOperator) {
@@ -135,6 +139,11 @@ contract WarCitizenToken is ERC721Upgradeable, AccessControlUpgradeable, Pausabl
 	/** Sets the design. */
 	function setDesign(address contractAddress) external onlyRole(DESIGNER_ROLE) {
 		design = IWarDesign(contractAddress);
+	}
+
+	/** Sets the logic contract. */
+	function setLogic(address contractAddress) external onlyRole(DESIGNER_ROLE) {
+		logic = IWarLogic(contractAddress);
 	}
 
 	/** Returns if address if owner of tokenId */
@@ -280,6 +289,13 @@ contract WarCitizenToken is ERC721Upgradeable, AccessControlUpgradeable, Pausabl
 		super._beforeTokenTransfer(from, to, tokenId, batchSize);
 		// Not minting, burn or transfer
 		if (from != address(0)) {
+			// Check if citizen is inside a castle and deallocate
+			uint256 castleId = logic.getCitizenCastle(tokenId);
+			if (castleId != 0) {
+				logic.deallocateCitizen(castleId, tokenId);
+			}
+
+			// Decrement the owner token counter
 			_ownedTokensCount[from].decrement();
 		}
 		if (to == address(0)) {
