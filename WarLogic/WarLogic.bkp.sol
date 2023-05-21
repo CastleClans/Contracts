@@ -6,7 +6,6 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
 import "@openzeppelin/contracts/utils/Counters.sol";
 import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
-import "@openzeppelin/contracts/utils/structs/EnumerableMap.sol";
 
 import "../WarCastleDetails.sol";
 import "../WarCastle/IWarCastleToken.sol";
@@ -22,10 +21,6 @@ contract WarLogic is AccessControlUpgradeable, UUPSUpgradeable, IWarLogic {
 	using WarCitizenDetails for WarCitizenDetails.Details;
     using Counters for Counters.Counter;
 
-    using EnumerableSet for EnumerableSet.AddressSet;
-    using EnumerableSet for EnumerableSet.UintSet;
-    using EnumerableMap for EnumerableMap.UintToUintMap;
-
     IWarCastleToken public contract_castle;
     IWarCitizenToken public contract_citizen;
 
@@ -33,47 +28,44 @@ contract WarLogic is AccessControlUpgradeable, UUPSUpgradeable, IWarLogic {
 	bytes32 public constant DESIGNER_ROLE = keccak256("DESIGNER_ROLE");
 
     // Mapping from owner address to token ID.
-    // Owner -> CastleId -> tokenIds[]
-
-    // mapping(address => mapping(uint256 => uint256[])) private castle_citizens;
-    mapping(uint256 => EnumerableSet.UintSet) private castle_citizens;
-    mapping(address => EnumerableMap.UintToUintMap) private citizens_allocation;
+	mapping(uint256 => uint256[]) public castle_citizens;
+    mapping(address => mapping(uint256 => uint256)) public citizens_castle;
+    
+    mapping (uint256 => Counters.Counter) private _citizens_castle_counter;
+    mapping (address => Counters.Counter) private _tot_allocated;
 
     function initialize() public initializer {
 		__AccessControl_init();
 		__UUPSUpgradeable_init();
 
-        _setupRole(DEFAULT_ADMIN_ROLE, msg.sender);
+		_setupRole(DEFAULT_ADMIN_ROLE, msg.sender);
 		_setupRole(UPGRADER_ROLE, msg.sender);
 		_setupRole(DESIGNER_ROLE, msg.sender);
         // Variables mix
 	}
 
-    function getCitizenCastle(uint256 citizenId) external view returns (uint256) {
-        (, uint256 val) = citizens_allocation[msg.sender].tryGet(citizenId);
-        return val;
-    }
+    function setCastle(address contractAddress) external onlyRole(DESIGNER_ROLE) {
+		contract_castle = IWarCastleToken(contractAddress);
+	}
 
-    function getCitizenCastleOfOwner(address owner, uint256 citizenId) external view returns (uint256) {
-        (, uint256 val) = citizens_allocation[owner].tryGet(citizenId);
-        return val;
+    function setCitizen(address contractAddress) external onlyRole(DESIGNER_ROLE) {
+		contract_citizen = IWarCitizenToken(contractAddress);
+	}
+
+    function getCitizenCastle(address owner, uint256 citizenId) external view returns (uint256) {
+        return citizens_castle[owner][citizenId];
     }
 
     function getCastleCitizens(uint256 castleId) external view returns (uint256[] memory) {
-        return castle_citizens[castleId].values();
+        return castle_citizens[castleId];
     }
 
     function getOwnerCitizensInCastle(address owner) external view returns (uint256[] memory) {
-        uint256 size = citizens_allocation[owner].length();
-
-        uint256[] memory result = new uint256[](size);
+        uint256[] memory result = new uint256[](_tot_allocated[owner].current());
 		uint256 index = 0;
-		for (uint256 i = 0; i < size; ++i) {
-            (uint256 citizenId, uint256 castleId) = citizens_allocation[owner].at(i);
-            if (castleId != 0) {
-                result[index] = citizenId;
-                index++;
-            }
+		for (uint256 i = 0; i < _tot_allocated[owner].current(); ++i) {
+			result[index] = citizens_castle[owner][i];
+			index++;
 		}
         return result;
     }
@@ -87,17 +79,19 @@ contract WarLogic is AccessControlUpgradeable, UUPSUpgradeable, IWarLogic {
         WarCastleDetails.Details memory castle_detail;
 		castle_detail = WarCastleDetails.decode(baseDetails);
 
-        require(castle_citizens[castleId].length()+1 <= castle_detail.max_citizens, "Castle max citizen reached");
-        require(!castle_citizens[castleId].contains(citizenId), "Citizen already in castle");
+        uint256[] storage citizens_ids = castle_citizens[castleId];
+        require(citizens_ids.length+1 <= castle_detail.max_citizens, "Castle max citizen reached");
+        require(citizens_castle[msg.sender][citizenId] != castleId, "Citizen already in castle");
 
-        (, uint256 citizenCastle) = citizens_allocation[msg.sender].tryGet(citizenId);
-
-        if (citizenCastle != 0) {
-            deallocateCitizen(citizenCastle, citizenId);
+        if (citizens_castle[msg.sender][citizenId] != 0) {
+            deallocateCitizen(citizens_castle[msg.sender][citizenId], citizenId);
         }
-        
-        castle_citizens[castleId].add(citizenId);
-        citizens_allocation[msg.sender].set(citizenId, castleId);
+
+        citizens_castle[msg.sender][citizenId] = castleId;
+        citizens_ids.push(citizenId);
+
+        _tot_allocated[msg.sender].increment();
+        _citizens_castle_counter[castleId].increment();
     }
 
     function deallocateCitizen(uint256 castleId, uint256 citizenId) public {
@@ -107,15 +101,28 @@ contract WarLogic is AccessControlUpgradeable, UUPSUpgradeable, IWarLogic {
             require(contract_citizen.isOwnerOf(msg.sender, citizenId), string.concat("Citizen not owned by sender ", Strings.toHexString(msg.sender)));
         }
 
-        address citizen_owner = contract_citizen.ownerOf(citizenId);
         uint256 baseDetails = contract_castle.getTokenDetails(castleId);
 
         WarCastleDetails.Details memory castle_detail;
 		castle_detail = WarCastleDetails.decode(baseDetails);
 
-        require(citizens_allocation[citizen_owner].get(citizenId) == castleId, "Citizen not in castle");
-        citizens_allocation[citizen_owner].set(citizenId, 0);
-        castle_citizens[castleId].remove(citizenId);
+        require(citizens_castle[contract_citizen.ownerOf(citizenId)][citizenId] == castleId, "Citizen not in castle");
+
+        uint256[] memory newData = new uint256[](_citizens_castle_counter[castleId].current());
+        for (uint256 index = 0; index < castle_citizens[castleId].length; index++) {
+            if (castle_citizens[castleId][index] != citizenId) {
+                newData[newData.length] = citizenId;
+            }
+        }
+        // Clear the castle citizens array
+        delete castle_citizens[castleId];
+        castle_citizens[castleId] = newData;
+
+        // Clear the citizen castle array
+        delete citizens_castle[contract_citizen.ownerOf(citizenId)][citizenId];
+
+        _citizens_castle_counter[castleId].decrement();
+        _tot_allocated[msg.sender].decrement();
     }
 
     function deallocateAllCitizens(uint256 castleId) public {
@@ -123,21 +130,14 @@ contract WarLogic is AccessControlUpgradeable, UUPSUpgradeable, IWarLogic {
         if (msg.sender != address(contract_castle) && msg.sender != address(contract_citizen)) {
             require(contract_castle.isOwnerOf(msg.sender, castleId), string.concat("Castle not owned by sender ", Strings.toHexString(msg.sender)));
         }
-        address owner = contract_castle.ownerOf(castleId);
-        uint256 size = castle_citizens[castleId].length();
-        for (uint256 index = 0; index < size; index++) {
-            citizens_allocation[owner].set(castle_citizens[castleId].at(index), 0);
+        for (uint256 index = 0; index < castle_citizens[castleId].length; index++) {
+            address owner = contract_castle.ownerOf(castleId);
+            delete citizens_castle[owner][castle_citizens[castleId][index]];
+            _citizens_castle_counter[castleId].decrement();
+            _tot_allocated[owner].decrement();
         }
         delete castle_citizens[castleId];
     }
-
-    function setCastle(address contractAddress) external onlyRole(DESIGNER_ROLE) {
-		contract_castle = IWarCastleToken(contractAddress);
-	}
-
-    function setCitizen(address contractAddress) external onlyRole(DESIGNER_ROLE) {
-		contract_citizen = IWarCitizenToken(contractAddress);
-	}
 
 	function _authorizeUpgrade(address newImplementation) internal override onlyRole(UPGRADER_ROLE) {}
 
