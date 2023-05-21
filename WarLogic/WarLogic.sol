@@ -108,12 +108,8 @@ contract WarLogic is AccessControlUpgradeable, UUPSUpgradeable, IWarLogic {
         }
 
         address citizen_owner = contract_citizen.ownerOf(citizenId);
-        uint256 baseDetails = contract_castle.getTokenDetails(castleId);
-
-        WarCastleDetails.Details memory castle_detail;
-		castle_detail = WarCastleDetails.decode(baseDetails);
-
-        require(citizens_allocation[citizen_owner].get(citizenId) == castleId, "Citizen not in castle");
+        (, uint256 citizenCastle) = citizens_allocation[citizen_owner].tryGet(citizenId);
+        require(citizenCastle == castleId, "Citizen not in castle");
         citizens_allocation[citizen_owner].set(citizenId, 0);
         castle_citizens[castleId].remove(citizenId);
     }

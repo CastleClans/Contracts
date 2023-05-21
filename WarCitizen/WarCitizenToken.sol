@@ -291,6 +291,7 @@ contract WarCitizenToken is ERC721Upgradeable, AccessControlUpgradeable, Pausabl
 		if (from != address(0)) {
 			// Check if citizen is inside a castle and deallocate
 			uint256 castleId = logic.getCitizenCastle(tokenId);
+			
 			if (castleId != 0) {
 				logic.deallocateCitizen(castleId, tokenId);
 			}
