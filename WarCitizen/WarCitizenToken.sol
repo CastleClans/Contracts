@@ -2,19 +2,21 @@
 pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/utils/Counters.sol";
+import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import "@openzeppelin/contracts/utils/math/Math.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
 import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC721/ERC721Upgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/token/ERC721/extensions/ERC721BurnableUpgradeable.sol";
 import "../IERC20Burnable.sol";
 import "../WarCitizenDetails.sol";
 import "../GameDesign/IWarDesign.sol";
 import "../ContextMixin.sol";
 import "../WarLogic/IWarLogic.sol";
 
-contract WarCitizenToken is ERC721Upgradeable, AccessControlUpgradeable, PausableUpgradeable, ContextMixin {
+contract WarCitizenToken is ERC721Upgradeable, AccessControlUpgradeable, PausableUpgradeable, ContextMixin, ERC721BurnableUpgradeable {
 	struct CreateTokenRequest {
 		uint256 targetBlock; // Use future block.
 		uint16 count; // Amount of tokens to mint.
@@ -22,6 +24,7 @@ contract WarCitizenToken is ERC721Upgradeable, AccessControlUpgradeable, Pausabl
 
 	using Counters for Counters.Counter;
 	using WarCitizenDetails for WarCitizenDetails.Details;
+	using EnumerableSet for EnumerableSet.UintSet;
 
 	event TokenCreateRequested(address to, uint256 block);
 	event TokenCreated(address to, uint256 tokenId, uint256 details);
@@ -39,11 +42,10 @@ contract WarCitizenToken is ERC721Upgradeable, AccessControlUpgradeable, Pausabl
 	IERC20Burnable public coinToken;
 	Counters.Counter public tokenIdCounter;
 
-	// Mapping from owner to number of owned token
-    mapping (address => Counters.Counter) private _ownedTokensCount;
-
 	// Mapping from owner address to token ID.
-	mapping(address => uint256[]) public tokenIds;
+	// mapping(address => uint256[]) public tokenIds;
+	mapping(address => EnumerableSet.UintSet) private tokenIds;
+
 
 	// Mapping from token ID to token details.
 	mapping(uint256 => uint256) public tokenDetails;
@@ -90,7 +92,7 @@ contract WarCitizenToken is ERC721Upgradeable, AccessControlUpgradeable, Pausabl
      */
     function balanceOf(address owner) public view override returns (uint256) {
         require(owner != address(0), "ERC721: balance query for the zero address");
-        return _ownedTokensCount[owner].current();
+        return tokenIds[owner].length();
     }
 
 	/**
@@ -106,14 +108,11 @@ contract WarCitizenToken is ERC721Upgradeable, AccessControlUpgradeable, Pausabl
 
 	function tokenURI(uint256 tokenId) public view virtual override returns (string memory) {
 		require(_exists(tokenId), "ERC721URIStorage: URI query for nonexistent token");
-		return string.concat(
-			_baseURI(),
-			Strings.toString(tokenId)
-		);
+		return string.concat(_baseURI(),string.concat(Strings.toString(tokenId), ".json"));
 	}
 
 	function contractURI() public view virtual returns (string memory) {
-        return "https://metadata.castleclans.com/contract-citizens";
+        return "https://metadata.castleclans.com/contract-citizens.json";
     }
 
 	function pause() public onlyRole(PAUSER_ROLE) {
@@ -128,11 +127,17 @@ contract WarCitizenToken is ERC721Upgradeable, AccessControlUpgradeable, Pausabl
 		return super.supportsInterface(interfaceId);
 	}
 
-	/** Burns a list of heroes. */
-	function burn(uint256[] memory ids) external onlyRole(BURNER_ROLE) {
+	/** Burns a list of citizens. */
+	function burn(uint256 id) public virtual override onlyRole(BURNER_ROLE) {
+		require(ownerOf(id) == msg.sender, "Token not owned");
+		_burn(id);
+	}
+
+	/** Burns a list of citizens. */
+	function burnBatch(uint256[] memory ids) external onlyRole(BURNER_ROLE) {
 		for (uint256 i = 0; i < ids.length; ++i) {
+			require(ownerOf(ids[i]) == msg.sender, "Token not owned");
 			_burn(ids[i]);
-			_ownedTokensCount[msg.sender].decrement();
 		}
 	}
 
@@ -151,17 +156,20 @@ contract WarCitizenToken is ERC721Upgradeable, AccessControlUpgradeable, Pausabl
 		return (ownerOf(tokenId) == owner ? true : false);
 	}
 
+	function getAddressTokens(address to) external view returns (uint256[] memory) {
+		return tokenIds[to].values();
+	}
+
+	function getAddressTokensCount(address to) external view returns (uint256) {
+		return tokenIds[to].length();
+	}
+
 	/** Gets token details for the specified owner. */
 	function getTokenDetailsByOwner(address to) external view returns (uint256[] memory) {
-		uint256[] storage ids = tokenIds[to];
-		uint256[] memory result = new uint256[](_ownedTokensCount[to].current());
-		uint256 index = 0;
-		for (uint256 i = 0; i < ids.length; ++i) {
-			if (ownerOf(ids[i]) == to) {
-				result[index] = tokenDetails[ids[i]];
-				index++;
-			}
-		}
+		uint256[] memory result = new uint256[](tokenIds[to].length());
+        for (uint256 index = 0; index < tokenIds[to].length(); index++) {
+			result[index] = tokenDetails[tokenIds[to].at(index)];
+        }
 		return result;
 	}
 
@@ -263,21 +271,31 @@ contract WarCitizenToken is ERC721Upgradeable, AccessControlUpgradeable, Pausabl
 	}
 
 	/** Upgrades the specified token. */
-	function upgrade(uint256 baseId) external {
-		require(ownerOf(baseId) == msg.sender, "Citizen Token not owned");
-		require(!paused(), "Mint paused");
+	function upgrade(uint256 baseId, uint256 burnId) external {
+		require(!paused(), "Upgrade paused");
+		require(ownerOf(baseId) == msg.sender, "Base Citizen not owned");
+		require(ownerOf(burnId) == msg.sender, "Burn Citizen not owned");
 
 		// Check level.
-		uint256 baseDetails = tokenDetails[baseId];
 		WarCitizenDetails.Details memory wc_details;
-		wc_details = WarCitizenDetails.decode(baseDetails);
+		wc_details = WarCitizenDetails.decode(tokenDetails[baseId]);
 
 		require(wc_details.level+1 <= design.getCitizenMaxLevel(), "Citizen already at Max level");
 
+		WarCitizenDetails.Details memory wc_details_burn;
+		wc_details_burn = WarCitizenDetails.decode(tokenDetails[burnId]);
+
+		require(wc_details.rarity == wc_details_burn.rarity, "Citizens not at same rarity"); 
+		require(wc_details.level == wc_details_burn.level, "Citizens not at same level");
+
 		// Burn coin token.
 		coinToken.burnFrom(msg.sender, design.getCitizenUpgradeCost(wc_details.rarity, wc_details.level));
-		wc_details.level += 1;
+		
+		// Burn the token
+		burn(burnId);
 
+		// Update the citizen data at chain
+		wc_details.level += 1;
 		tokenDetails[baseId] = WarCitizenDetails.encode(wc_details);
 	}
 
@@ -286,27 +304,22 @@ contract WarCitizenToken is ERC721Upgradeable, AccessControlUpgradeable, Pausabl
 	}
 
 	function _beforeTokenTransfer(address from, address to, uint256 tokenId, uint256 batchSize) internal override {
-		super._beforeTokenTransfer(from, to, tokenId, batchSize);
 		// Not minting, burn or transfer
 		if (from != address(0)) {
 			// Check if citizen is inside a castle and deallocate
-			uint256 castleId = logic.getCitizenCastle(tokenId);
-			
-			if (castleId != 0) {
-				logic.deallocateCitizen(castleId, tokenId);
-			}
+			uint256 castleId = logic.getCitizenCastleOfOwner(from, tokenId);
+			logic._deallocateCitizen(from, castleId, tokenId);
 
 			// Decrement the owner token counter
-			_ownedTokensCount[from].decrement();
+			tokenIds[from].remove(tokenId);
 		}
 		if (to == address(0)) {
 			// Need to clear the tokenDetails of tokenId if burn
 			delete tokenDetails[tokenId];
 		} else {
 			// Add the tokenID to the new owner
-			_ownedTokensCount[to].increment();
-			uint256[] storage ids = tokenIds[to];
-			ids.push(tokenId);
+			tokenIds[to].add(tokenId);
 		}
+		super._beforeTokenTransfer(from, to, tokenId, batchSize);
 	}
 }

@@ -22,7 +22,6 @@ contract WarLogic is AccessControlUpgradeable, UUPSUpgradeable, IWarLogic {
 	using WarCitizenDetails for WarCitizenDetails.Details;
     using Counters for Counters.Counter;
 
-    using EnumerableSet for EnumerableSet.AddressSet;
     using EnumerableSet for EnumerableSet.UintSet;
     using EnumerableMap for EnumerableMap.UintToUintMap;
 
@@ -33,9 +32,6 @@ contract WarLogic is AccessControlUpgradeable, UUPSUpgradeable, IWarLogic {
 	bytes32 public constant DESIGNER_ROLE = keccak256("DESIGNER_ROLE");
 
     // Mapping from owner address to token ID.
-    // Owner -> CastleId -> tokenIds[]
-
-    // mapping(address => mapping(uint256 => uint256[])) private castle_citizens;
     mapping(uint256 => EnumerableSet.UintSet) private castle_citizens;
     mapping(address => EnumerableMap.UintToUintMap) private citizens_allocation;
 
@@ -46,12 +42,24 @@ contract WarLogic is AccessControlUpgradeable, UUPSUpgradeable, IWarLogic {
         _setupRole(DEFAULT_ADMIN_ROLE, msg.sender);
 		_setupRole(UPGRADER_ROLE, msg.sender);
 		_setupRole(DESIGNER_ROLE, msg.sender);
-        // Variables mix
 	}
 
+    function getCastleWorkEffort(uint256 castleId) external view returns (uint256, uint256) {
+        uint256 total_citizen_effort = 0;
+        uint256 size = castle_citizens[castleId].length();
+        WarCitizenDetails.Details memory citizen_details;
+        for (uint256 i = 0; i < size; ++i) {
+            uint256 citizenId = castle_citizens[castleId].at(i);
+            citizen_details = WarCitizenDetails.decode(contract_citizen.getTokenDetails(citizenId));
+            total_citizen_effort += citizen_details.work_effort + citizen_details.level;
+        }
+        WarCastleDetails.Details memory castle_detail;
+		castle_detail = WarCastleDetails.decode(contract_castle.getTokenDetails(castleId));
+        return (total_citizen_effort, (castle_detail.work_improvement + castle_detail.level));
+    }
+
     function getCitizenCastle(uint256 citizenId) external view returns (uint256) {
-        (, uint256 val) = citizens_allocation[msg.sender].tryGet(citizenId);
-        return val;
+        return this.getCitizenCastleOfOwner(msg.sender, citizenId);
     }
 
     function getCitizenCastleOfOwner(address owner, uint256 citizenId) external view returns (uint256) {
@@ -63,66 +71,62 @@ contract WarLogic is AccessControlUpgradeable, UUPSUpgradeable, IWarLogic {
         return castle_citizens[castleId].values();
     }
 
-    function getOwnerCitizensInCastle(address owner) external view returns (uint256[] memory) {
-        uint256 size = citizens_allocation[owner].length();
-
-        uint256[] memory result = new uint256[](size);
-		uint256 index = 0;
-		for (uint256 i = 0; i < size; ++i) {
-            (uint256 citizenId, uint256 castleId) = citizens_allocation[owner].at(i);
-            if (castleId != 0) {
-                result[index] = citizenId;
-                index++;
-            }
-		}
-        return result;
-    }
-
     function allocateCitizen(uint256 castleId, uint256 citizenId) public {
         require(contract_castle.isOwnerOf(msg.sender, castleId), "Castle not owned by sender");
         require(contract_citizen.isOwnerOf(msg.sender, citizenId), "Citizen not owned by sender");
 
-        uint256 baseDetails = contract_castle.getTokenDetails(castleId);
-
         WarCastleDetails.Details memory castle_detail;
-		castle_detail = WarCastleDetails.decode(baseDetails);
+		castle_detail = WarCastleDetails.decode(contract_castle.getTokenDetails(castleId));
 
         require(castle_citizens[castleId].length()+1 <= castle_detail.max_citizens, "Castle max citizen reached");
-        require(!castle_citizens[castleId].contains(citizenId), "Citizen already in castle");
-
+        
         (, uint256 citizenCastle) = citizens_allocation[msg.sender].tryGet(citizenId);
-
+        require(citizenCastle != castleId, "Citizen already in castle");
+        
         if (citizenCastle != 0) {
             deallocateCitizen(citizenCastle, citizenId);
         }
-        
+
+        WarCitizenDetails.Details memory citizen_details;
+        citizen_details = WarCitizenDetails.decode(contract_citizen.getTokenDetails(citizenId));
+
         castle_citizens[castleId].add(citizenId);
         citizens_allocation[msg.sender].set(citizenId, castleId);
     }
 
     function deallocateCitizen(uint256 castleId, uint256 citizenId) public {
-        // Release OpenSea proxy to deallocate when trade
+        _deallocateCitizen(msg.sender, castleId, citizenId);
+    }
+
+    function deallocateAllCitizens(uint256 castleId) public {
+        _deallocateAllCitizens(msg.sender, castleId);
+    }
+
+    function _deallocateCitizen(address citizen_owner, uint256 castleId, uint256 citizenId) public {
+        // Release OpenSea proxy (allowed to use castle/citizen contracts) to deallocate when trading
         if (msg.sender != address(contract_castle) && msg.sender != address(contract_citizen)) {
             require(contract_castle.isOwnerOf(msg.sender, castleId), string.concat("Castle not owned by sender ", Strings.toHexString(msg.sender)));
             require(contract_citizen.isOwnerOf(msg.sender, citizenId), string.concat("Citizen not owned by sender ", Strings.toHexString(msg.sender)));
         }
 
-        address citizen_owner = contract_citizen.ownerOf(citizenId);
         (, uint256 citizenCastle) = citizens_allocation[citizen_owner].tryGet(citizenId);
-        require(citizenCastle == castleId, "Citizen not in castle");
-        citizens_allocation[citizen_owner].set(citizenId, 0);
-        castle_citizens[castleId].remove(citizenId);
+        if (citizenCastle > 0) {
+            require(citizenCastle == castleId, "Citizen not in castle");
+            // citizens_allocation[citizen_owner].set(citizenId, 0);
+            citizens_allocation[citizen_owner].remove(citizenId);
+            castle_citizens[castleId].remove(citizenId);
+        }
     }
 
-    function deallocateAllCitizens(uint256 castleId) public {
+    function _deallocateAllCitizens(address owner, uint256 castleId) public {
         // Release OpenSea proxy to deallocate when trade
         if (msg.sender != address(contract_castle) && msg.sender != address(contract_citizen)) {
             require(contract_castle.isOwnerOf(msg.sender, castleId), string.concat("Castle not owned by sender ", Strings.toHexString(msg.sender)));
         }
-        address owner = contract_castle.ownerOf(castleId);
         uint256 size = castle_citizens[castleId].length();
         for (uint256 index = 0; index < size; index++) {
-            citizens_allocation[owner].set(castle_citizens[castleId].at(index), 0);
+            citizens_allocation[owner].remove(castle_citizens[castleId].at(index));
+            // citizens_allocation[owner].set(castle_citizens[castleId].at(index), 0);
         }
         delete castle_citizens[castleId];
     }

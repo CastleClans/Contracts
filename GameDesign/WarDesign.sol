@@ -70,7 +70,7 @@ contract WarDesign is AccessControlUpgradeable, UUPSUpgradeable, IWarDesign {
 		castle_drop_rate = [5007, 2654, 1532, 607, 201];
 		castle_mintCost = 100 ether;
 		castle_maxLevel = 4;
-		castle_baseURI = "https://metadata.castleclans.com/castle?id=";
+		castle_baseURI = "https://metadata.castleclans.com/castle/";
 
 		castle_upgradeCosts.push([21 ether, 34 ether, 55 ether, 89 ether]);
 		castle_upgradeCosts.push([34 ether, 55 ether, 89 ether, 144 ether]);
@@ -88,7 +88,7 @@ contract WarDesign is AccessControlUpgradeable, UUPSUpgradeable, IWarDesign {
 		citizen_drop_rate = [8287, 1036, 518, 104, 56];
 		citizen_mintCost = 10 ether;
 		citizen_maxLevel = 4;
-		citizen_baseURI = "https://metadata.castleclans.com/citizen?id=";
+		citizen_baseURI = "https://metadata.castleclans.com/citizen/";
 
 		citizen_upgradeCosts.push([3 ether, 4 ether, 6 ether, 9 ether]);
 		citizen_upgradeCosts.push([4 ether, 6 ether, 9 ether, 15 ether]);
