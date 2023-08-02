@@ -27,11 +27,6 @@ contract WarLogic is AccessControlUpgradeable, UUPSUpgradeable, IWarLogic {
     using EnumerableSet for EnumerableSet.UintSet;
     using EnumerableMap for EnumerableMap.UintToUintMap;
 
-    struct MapTile {
-        uint256 x;
-        uint256 y;
-    }
-
     IWarCastleToken public contract_castle;
     IWarCitizenToken public contract_citizen;
     IWarDesign public contract_design;
