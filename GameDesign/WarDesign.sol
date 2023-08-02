@@ -44,6 +44,7 @@ contract WarDesign is AccessControlUpgradeable, UUPSUpgradeable, IWarDesign {
 	uint256 private castle_mintCost;
 	uint256 private castle_maxLevel;
 	uint256[][] private castle_upgradeCosts;
+	uint256[] private castle_move_cost;
 	string private castle_baseURI;
 
 	// Citizen variables
@@ -77,6 +78,8 @@ contract WarDesign is AccessControlUpgradeable, UUPSUpgradeable, IWarDesign {
 		castle_upgradeCosts.push([55 ether, 89 ether, 144 ether, 233 ether]);
 		castle_upgradeCosts.push([89 ether, 144 ether, 233 ether, 377 ether]);
 		castle_upgradeCosts.push([144 ether, 233 ether, 377 ether, 610 ether]);
+
+		castle_move_cost = [21 ether, 34 ether, 55 ether, 89 ether, 144 ether];
 
 		// Citizen
 		citizenRarityStats[0] = CitizenStats(StatsRange(1, 20), StatsRange(1, 20), StatsRange(0,100), StatsRange(1, 5), StatsRange(2, 5));
@@ -131,6 +134,14 @@ contract WarDesign is AccessControlUpgradeable, UUPSUpgradeable, IWarDesign {
 
 	function getCastleUpgradeCosts() external view returns (uint256[][] memory) {
 		return castle_upgradeCosts;
+	}
+
+	function getCastleMoveCosts() external view returns (uint256[] memory) {
+		return castle_move_cost;
+	}
+
+	function getCastleMoveCost(uint256 rarity) external view returns (uint256) {
+		return castle_move_cost[rarity];
 	}
 
 	function getCastleBaseURI() external view returns (string memory) {

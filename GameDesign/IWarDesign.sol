@@ -26,6 +26,10 @@ interface IWarDesign {
 
 	function getCitizenUpgradeCosts() external view returns (uint256[][] memory);
 
+	function getCastleMoveCosts() external view returns (uint256[] memory);
+	
+	function getCastleMoveCost(uint256 rarity) external view returns (uint256);
+
 	function getCitizeBaseURI() external view returns (string memory);
 
 	function createRandomWarCitizenToken(uint256 seed, uint256 id) external view returns (uint256 nextSeed, uint256 encodedDetails);

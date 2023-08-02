@@ -9,7 +9,7 @@ import "./WarCoinVesting.sol";
  *
  */
 contract PrivateSaleWarCoinVesting is WarCoinVesting {
-	constructor(address _token, address _owner, uint256 _vestingStartAt) WarCoinVesting(_token, _owner, _vestingStartAt, 10) {}
+	constructor(address _token, address _owner, uint256 _vestingStartAt) WarCoinVesting(_token, _owner, (_vestingStartAt + 2628000), 10) {}
 }
 
 /**
@@ -22,6 +22,18 @@ contract PrivateSaleWarCoinVesting is WarCoinVesting {
 contract TeamWarCoinVesting is WarCoinVesting {
 	//uint256 private SECONDS_PER_YEAR = 31536000;
 	constructor(address _token, address _owner, uint256 _vestingStartAt) WarCoinVesting(_token, _owner, (_vestingStartAt + 31536000), 12) {}
+}
+
+/**
+ * @dev EcosystemWarCoinVesting will be blocked for 1 month,
+ * then releaseed linearly each month during the next year.
+ * Hence, the _vestingStartAt should delay 1 month
+ * and the vestingDuration should be 12 months.
+ *
+ */
+contract EcosystemWarCoinVesting is WarCoinVesting {
+	//uint256 private SECONDS_PER_YEAR = 31536000;
+	constructor(address _token, address _owner, uint256 _vestingStartAt) WarCoinVesting(_token, _owner, (_vestingStartAt + 2628000), 12) {}
 }
 
 /**
@@ -65,10 +77,6 @@ contract ReserveWarCoinVesting is WarCoinVesting {
  * Notice: remember to config the Token address and approriate startAtTimeStamp
  */
 contract WarCoinVestingFactory {
-	// put the token address here
-	// This should be included in the contract for transparency
-	address public TOKEN_ADDRESS = 0x0000000000000000000000000000000000000000;
-
 	// put the startAtTimeStamp here
 	// To test all contracts, change this timestamp to time in the past.
 	uint256 public startAtTimeStamp = block.timestamp;
@@ -77,26 +85,30 @@ contract WarCoinVestingFactory {
 	address public owner;
 	address public privateSaleWarCoinVesting;
 	address public teamWarCoinVesting;
+	address public ecosystemWarCoinVesting;
 	address public advisorWarCoinVesting;
 	address public dexLiquidityWarCoinVesting;
 	address public reserveWarCoinVesting;
 
-	constructor() {
+	constructor(address token_address) {
 		owner = msg.sender;
 
-		PrivateSaleWarCoinVesting _privateSaleWarCoinVesting = new PrivateSaleWarCoinVesting(TOKEN_ADDRESS, owner, startAtTimeStamp);
+		PrivateSaleWarCoinVesting _privateSaleWarCoinVesting = new PrivateSaleWarCoinVesting(token_address, owner, startAtTimeStamp);
 		privateSaleWarCoinVesting = address(_privateSaleWarCoinVesting);
 
-		TeamWarCoinVesting _teamWarCoinVesting = new TeamWarCoinVesting(TOKEN_ADDRESS, owner, startAtTimeStamp);
+		DexLiquidityWarCoinVesting _dexLiquidityWarCoinVesting = new DexLiquidityWarCoinVesting(token_address, owner, startAtTimeStamp);
+		dexLiquidityWarCoinVesting = address(_dexLiquidityWarCoinVesting);
+		
+		EcosystemWarCoinVesting _ecosystemWarCoinVesting = new EcosystemWarCoinVesting(token_address, owner, startAtTimeStamp);
+		ecosystemWarCoinVesting = address(_ecosystemWarCoinVesting);
+
+		AdvisorWarCoinVesting _advisorWarCoinVesting = new AdvisorWarCoinVesting(token_address, owner, startAtTimeStamp);
+		advisorWarCoinVesting = address(_advisorWarCoinVesting);
+		
+		TeamWarCoinVesting _teamWarCoinVesting = new TeamWarCoinVesting(token_address, owner, startAtTimeStamp);
 		teamWarCoinVesting = address(_teamWarCoinVesting);
 
-		AdvisorWarCoinVesting _advisorWarCoinVesting = new AdvisorWarCoinVesting(TOKEN_ADDRESS, owner, startAtTimeStamp);
-		advisorWarCoinVesting = address(_advisorWarCoinVesting);
-
-		DexLiquidityWarCoinVesting _dexLiquidityWarCoinVesting = new DexLiquidityWarCoinVesting(TOKEN_ADDRESS, owner, startAtTimeStamp);
-		dexLiquidityWarCoinVesting = address(_dexLiquidityWarCoinVesting);
-
-		ReserveWarCoinVesting _reserveWarCoinVesting = new ReserveWarCoinVesting(TOKEN_ADDRESS, owner, startAtTimeStamp);
+		ReserveWarCoinVesting _reserveWarCoinVesting = new ReserveWarCoinVesting(token_address, owner, startAtTimeStamp);
 		reserveWarCoinVesting = address(_reserveWarCoinVesting);
 	}
 }

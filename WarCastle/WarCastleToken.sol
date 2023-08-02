@@ -296,6 +296,9 @@ contract WarCastleToken is ERC721Upgradeable, AccessControlUpgradeable, Pausable
 		// Update the castle data at chain
 		wc_details.level += 1;
 		tokenDetails[baseId] = WarCastleDetails.encode(wc_details);
+
+		// Check if burned castle was placed on map, if so remove it
+		logic.clearBurnedCastle(burnId);
 	}
 
 	function _transfer(address from, address to, uint256 tokenId) internal override onlyRole(TRADER_ROLE) {
