@@ -155,6 +155,10 @@ contract WarCastleToken is ERC721Upgradeable, AccessControlUpgradeable, Pausable
 		return (ownerOf(tokenId) == owner ? true : false);
 	}
 
+	function exists(uint256 tokenId) external view returns (bool) {
+		return _exists(tokenId);
+	}
+
 	function getAddressTokens(address to) external view returns (uint256[] memory) {
 		return tokenIds[to].values();
 	}

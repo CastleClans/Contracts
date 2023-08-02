@@ -6,4 +6,5 @@ interface IWarCastleToken {
     function getTokenDetails(uint256 tokenId) external view returns (uint256);
     function isOwnerOf(address owner, uint256 tokenId) external view returns (bool);
     function ownerOf(uint256 tokenId) external view returns (address);
+    function exists(uint256 tokenId) external view returns (bool);
 }
