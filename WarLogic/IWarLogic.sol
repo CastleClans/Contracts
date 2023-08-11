@@ -9,9 +9,7 @@ interface IWarLogic {
 	function getCastleCitizens(uint256 castleId) external view returns (uint256[] memory);
 	function allocateCitizen(uint256 castleId, uint256 citizenId) external;
 	function deallocateCitizen(uint256 castleId, uint256 citizenId) external;
-	function _deallocateCitizen(address citizen_owner, uint256 castleId, uint256 citizenId) external;
 	function deallocateAllCitizens(uint256 castleId) external;
-	function _deallocateAllCitizens(address owner, uint256 castleId) external;
 	function getCastleWorkEffort(uint256 castleId) external view returns (uint256, uint256);
 	function getMapChunk(int256 _x, int256 _y, int256 _size) external view returns (int256[][] memory);
 	function placeCastle(uint256 castle_id, int256 _x, int256 _y) external;

@@ -89,6 +89,7 @@ contract WarLogic is AccessControlUpgradeable, UUPSUpgradeable, IWarLogic {
 	function allocateCitizen(uint256 castleId, uint256 citizenId) public {
 		require(contract_castle.isOwnerOf(msg.sender, castleId), "Castle not owned by sender");
 		require(contract_citizen.isOwnerOf(msg.sender, citizenId), "Citizen not owned by sender");
+		require(isCastlePlaced(castleId), "Castle must be placed in the world");
 
 		WarCastleDetails.Details memory castle_detail;
 		castle_detail = WarCastleDetails.decode(contract_castle.getTokenDetails(castleId));
@@ -110,36 +111,32 @@ contract WarLogic is AccessControlUpgradeable, UUPSUpgradeable, IWarLogic {
 	}
 
 	function deallocateCitizen(uint256 castleId, uint256 citizenId) public {
-		_deallocateCitizen(msg.sender, castleId, citizenId);
-	}
-
-	function deallocateAllCitizens(uint256 castleId) public {
-		_deallocateAllCitizens(msg.sender, castleId);
-	}
-
-	function _deallocateCitizen(address citizen_owner, uint256 castleId, uint256 citizenId) public {
 		// Release OpenSea proxy (allowed to use castle/citizen contracts) to deallocate when trading
 		if (msg.sender != address(contract_castle) && msg.sender != address(contract_citizen)) {
 			require(contract_castle.isOwnerOf(msg.sender, castleId), string.concat("Castle not owned by sender ", Strings.toHexString(msg.sender)));
 			require(contract_citizen.isOwnerOf(msg.sender, citizenId), string.concat("Citizen not owned by sender ", Strings.toHexString(msg.sender)));
 		}
-
-		(, uint256 citizenCastle) = citizens_allocation[citizen_owner].tryGet(citizenId);
+	
+		address citizenOwner = contract_citizen.ownerOf(citizenId);
+		(, uint256 citizenCastle) = citizens_allocation[citizenOwner].tryGet(citizenId);
+		
 		if (citizenCastle > 0) {
 			require(citizenCastle == castleId, "Citizen not in castle");
-			citizens_allocation[citizen_owner].remove(citizenId);
+			citizens_allocation[citizenOwner].remove(citizenId);
 			castle_citizens[castleId].remove(citizenId);
 		}
 	}
 
-	function _deallocateAllCitizens(address owner, uint256 castleId) public {
+	function deallocateAllCitizens(uint256 castleId) public {
 		// Release OpenSea proxy to deallocate when trade
 		if (msg.sender != address(contract_castle) && msg.sender != address(contract_citizen)) {
 			require(contract_castle.isOwnerOf(msg.sender, castleId), string.concat("Castle not owned by sender ", Strings.toHexString(msg.sender)));
 		}
 		uint256 size = castle_citizens[castleId].length();
-		for (uint256 index = 0; index < size; index++) {
-			citizens_allocation[owner].remove(castle_citizens[castleId].at(index));
+		for (uint256 index = 0; index < size; ++index) {
+			uint256 citizenId = castle_citizens[castleId].at(index);
+			address citizenOwner = contract_citizen.ownerOf(citizenId);
+			citizens_allocation[citizenOwner].remove(citizenId);
 		}
 		delete castle_citizens[castleId];
 	}
@@ -166,7 +163,7 @@ contract WarLogic is AccessControlUpgradeable, UUPSUpgradeable, IWarLogic {
 		require(contract_castle.isOwnerOf(msg.sender, castle_id), "Castle not owned by sender");
 		require(_x != 0 || _y != 0, "Position 0,0 is invalid");
 		require(getTile(_x, _y) == 0, "Position already taken");
-		require(isCastlePlaced(castle_id) == false, "Castle already placed");
+		require(!isCastlePlaced(castle_id), "Castle already placed");
 
 		bool loopCheck = true;
 		bool canPlace = false;
@@ -202,7 +199,7 @@ contract WarLogic is AccessControlUpgradeable, UUPSUpgradeable, IWarLogic {
 
 	function moveCastle(uint256 castleId, int256 new_x, int256 new_y) public {
 		require(contract_castle.isOwnerOf(msg.sender, castleId), "Castle not owned by sender");
-		require(isCastlePlaced(castleId) == true, "Castle not placed yet");
+		require(isCastlePlaced(castleId), "Castle not placed yet");
 
 		// Burn coin token.
 		WarCastleDetails.Details memory castle_detail;
@@ -219,7 +216,7 @@ contract WarLogic is AccessControlUpgradeable, UUPSUpgradeable, IWarLogic {
 	}
 
 	function clearBurnedCastle(uint256 castleId) public {
-		require(contract_castle.exists(castleId)==false, "Token must be burned");
+		require(!contract_castle.exists(castleId), "Token must be burned");
 		if (isCastlePlaced(castleId)) {
 			(int256 _x, int256 _y) = getCastlePosition(castleId);
 			totalCastlesInMap.decrement();

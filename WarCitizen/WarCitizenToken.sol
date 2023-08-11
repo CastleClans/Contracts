@@ -53,6 +53,9 @@ contract WarCitizenToken is ERC721Upgradeable, AccessControlUpgradeable, Pausabl
 	// Mapping from owner address to token requests.
 	mapping(address => CreateTokenRequest[]) public tokenRequests;
 
+	// Mapping from owner to receive gifted token
+	mapping(address => uint256) public tokenGifts;
+
 	IWarDesign public design;
 	IWarLogic public logic;
 
@@ -183,14 +186,33 @@ contract WarCitizenToken is ERC721Upgradeable, AccessControlUpgradeable, Pausabl
 		uint256 count;
 	}
 
+	/* Updates the amount of gift tokens avaible for the address */
+	function giftPlayer(address _address, uint256 amount) public onlyRole(UPGRADER_ROLE) {
+		tokenGifts[_address] += amount;
+	}
+
+	/* Return the amount of gift tokens avaible for the address */
+	function getGiftedTokens(address _address) public view returns (uint256) {
+		return tokenGifts[_address];
+	}
+
 	/** Mints tokens. */
 	function mint(uint256 count) external {
 		require(!paused(), "Mint paused");
 		require(count > 0, "No token to mint");
 		require(count <= 10, "Max 10 mints per block");
 
-		// Burn coins
-		coinToken.burnFrom(msg.sender, design.getCitizenMintCost() * count);
+		// Verify if owner have any gift avaible to mint
+		uint256 gifts = getGiftedTokens(msg.sender);
+		
+		// Burn coins if minting paid tokens
+		if (gifts < count) {
+			coinToken.burnFrom(msg.sender, design.getCitizenMintCost() * (count-gifts));
+			tokenGifts[msg.sender] -= gifts;
+		} else {
+			tokenGifts[msg.sender] -= count;
+		}
+
 		// Create requests.
 		requestCreateToken(msg.sender, count);
 	}
@@ -291,6 +313,11 @@ contract WarCitizenToken is ERC721Upgradeable, AccessControlUpgradeable, Pausabl
 		// Burn coin token.
 		coinToken.burnFrom(msg.sender, design.getCitizenUpgradeCost(wc_details.rarity, wc_details.level));
 		
+		// Deallocate the citizen if needed
+		uint256 castleId = logic.getCitizenCastleOfOwner(msg.sender, burnId);
+		if (castleId != 0) {
+			logic.deallocateCitizen(castleId, burnId);
+		}
 		// Burn the token
 		burn(burnId);
 
@@ -308,7 +335,9 @@ contract WarCitizenToken is ERC721Upgradeable, AccessControlUpgradeable, Pausabl
 		if (from != address(0)) {
 			// Check if citizen is inside a castle and deallocate
 			uint256 castleId = logic.getCitizenCastleOfOwner(from, tokenId);
-			logic._deallocateCitizen(from, castleId, tokenId);
+			if (castleId != 0) {
+				logic.deallocateCitizen(castleId, tokenId);
+			}
 
 			// Decrement the owner token counter
 			tokenIds[from].remove(tokenId);

@@ -52,6 +52,9 @@ contract WarCastleToken is ERC721Upgradeable, AccessControlUpgradeable, Pausable
 	// Mapping from owner address to token requests.
 	mapping(address => CreateTokenRequest[]) public tokenRequests;
 
+	// Mapping from owner to receive gifted token
+	mapping(address => uint256) public tokenGifts;
+
 	IWarDesign public design;
 	IWarLogic public logic;
 
@@ -186,14 +189,33 @@ contract WarCastleToken is ERC721Upgradeable, AccessControlUpgradeable, Pausable
 		uint256 count;
 	}
 
+	/* Return the amount of gift tokens avaible for the owner */
+	function giftPlayer(address owner, uint256 amount) public onlyRole(UPGRADER_ROLE) {
+		tokenGifts[owner] += amount;
+	}
+
+	/* Return the amount of gift tokens avaible for the owner */
+	function getGiftedTokens(address owner) public view returns (uint256) {
+		return tokenGifts[owner];
+	}
+
 	/** Mints tokens. */
 	function mint(uint256 count) external {
 		require(!paused(), "Mint paused");
 		require(count > 0, "No token to mint");
 		require(count <= 10, "Max 10 mints per block");
 
-		// Burn coins
-		coinToken.burnFrom(msg.sender, design.getCastleMintCost() * count);
+		// Verify if owner have any gift avaible to mint
+		uint256 gifts = getGiftedTokens(msg.sender);
+		
+		// Burn coins if minting paid tokens
+		if (gifts < count) {
+			coinToken.burnFrom(msg.sender, design.getCastleMintCost() * (count-gifts));
+			tokenGifts[msg.sender] -= gifts;
+		} else {
+			tokenGifts[msg.sender] -= count;
+		}
+
 		// Create requests.
 		requestCreateToken(msg.sender, count);
 	}
@@ -293,7 +315,10 @@ contract WarCastleToken is ERC721Upgradeable, AccessControlUpgradeable, Pausable
 
 		// Burn coin token.
 		coinToken.burnFrom(msg.sender, design.getCastleUpgradeCost(wc_details.rarity, wc_details.level));
-		
+
+		// Deallocates any citizen inside the castle
+		logic.deallocateAllCitizens(burnId);
+
 		// Burn the token
 		burn(burnId);
 
@@ -315,7 +340,7 @@ contract WarCastleToken is ERC721Upgradeable, AccessControlUpgradeable, Pausable
 			// Check if citizen is inside a castle and deallocate
 			uint256[] memory citizensIds = logic.getCastleCitizens(tokenId);
 			if (citizensIds.length > 0) {
-				logic._deallocateAllCitizens(from, tokenId);
+				logic.deallocateAllCitizens(tokenId);
 			}
 			// Decrement the owner token counter
 			tokenIds[from].remove(tokenId);
