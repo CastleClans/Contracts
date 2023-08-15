@@ -18,6 +18,8 @@ Here, you'll find everything from our token contracts to our game mechanics and 
 
 6.  **WarVesting.sol**: The WarVesting contract ensures the regulated and fair distribution of tokens according to our tokenomics.
 
+7.  **WarReward.sol**: The WarReward contract manages the reward system of the game, allowing playres to withdraw coins direcly from the contract.
+
 ## Community and Support
 
 If you have any questions, need clarifications, or wish to contribute, please join our [Discord community](http://discord.castleclans.com). Our team and community members are always ready to assist.
