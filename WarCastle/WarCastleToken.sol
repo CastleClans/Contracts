@@ -32,9 +32,6 @@ contract WarCastleToken is ERC721Upgradeable, AccessControlUpgradeable, Pausable
 	bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
 	bytes32 public constant UPGRADER_ROLE = keccak256("UPGRADER_ROLE");
 	bytes32 public constant DESIGNER_ROLE = keccak256("DESIGNER_ROLE");
-	bytes32 public constant CLAIMER_ROLE = keccak256("CLAIMER_ROLE");
-	bytes32 public constant BURNER_ROLE = keccak256("BURNER_ROLE");
-	bytes32 public constant TRADER_ROLE = keccak256("TRADER_ROLE");
 
 	uint256 private constant maskLast8Bits = uint256(0xff);
 	uint256 private constant maskFirst248Bits = ~uint256(0xff);
@@ -71,9 +68,6 @@ contract WarCastleToken is ERC721Upgradeable, AccessControlUpgradeable, Pausable
 		_setupRole(PAUSER_ROLE, msg.sender);
 		_setupRole(UPGRADER_ROLE, msg.sender);
 		_setupRole(DESIGNER_ROLE, msg.sender);
-		_setupRole(CLAIMER_ROLE, msg.sender);
-		_setupRole(BURNER_ROLE, msg.sender);
-		_setupRole(TRADER_ROLE, msg.sender);
 
 		tokenIdCounter.increment(); // Skip token 0, so we can check ownership from logic contract
 	}
@@ -130,13 +124,13 @@ contract WarCastleToken is ERC721Upgradeable, AccessControlUpgradeable, Pausable
 	}
 
 	/** Burns a castle */
-	function burn(uint256 id) public virtual override onlyRole(BURNER_ROLE) {
+	function burn(uint256 id) public virtual override {
 		require(ownerOf(id) == msg.sender, "Token not owned");
 		_burn(id);
 	}
 
 	/** Burns a list of castles */
-	function burnBatch(uint256[] memory ids) external onlyRole(BURNER_ROLE) {
+	function burnBatch(uint256[] memory ids) external {
 		for (uint256 i = 0; i < ids.length; ++i) {
 			require(ownerOf(ids[i]) == msg.sender, "Token not owned");
 			_burn(ids[i]);
@@ -330,7 +324,7 @@ contract WarCastleToken is ERC721Upgradeable, AccessControlUpgradeable, Pausable
 		logic.clearBurnedCastle(burnId);
 	}
 
-	function _transfer(address from, address to, uint256 tokenId) internal override onlyRole(TRADER_ROLE) {
+	function _transfer(address from, address to, uint256 tokenId) internal override {
 		ERC721Upgradeable._transfer(from, to, tokenId);
 	}
 

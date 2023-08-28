@@ -73,6 +73,20 @@ contract WarLogic is AccessControlUpgradeable, UUPSUpgradeable, IWarLogic {
 		return (total_citizen_effort, (castle_detail.work_improvement + castle_detail.level));
 	}
 
+	function getPlayerWorkEffort(address player) external view returns (uint256, uint256) {
+		uint256[] memory castles = contract_castle.getAddressTokens(player);
+		uint256 total_workEffort = 0;
+		uint256 total_extra = 0;
+		for (uint256 index = 0; index < castles.length; index++) {
+			if (this.isCastlePlaced(castles[index])) {
+				(uint256 workEffort, uint256 extra) = this.getCastleWorkEffort(castles[index]);
+				total_workEffort  += workEffort;
+				total_extra += extra;
+			}
+		}
+		return (total_workEffort, total_extra);
+	}
+
 	function getCitizenCastle(uint256 citizenId) external view returns (uint256) {
 		return this.getCitizenCastleOfOwner(msg.sender, citizenId);
 	}
@@ -226,21 +240,21 @@ contract WarLogic is AccessControlUpgradeable, UUPSUpgradeable, IWarLogic {
 		}
 	}
 
-	function removeClastle(uint256 castleId) public {
-		require(contract_castle.isOwnerOf(msg.sender, castleId) == false, "Castle not owned by sender");
-		require(isCastlePlaced(castleId) == true, "Castle not placed yet");
+	// function removeClastle(uint256 castleId) public {
+	// 	require(contract_castle.isOwnerOf(msg.sender, castleId) == false, "Castle not owned by sender");
+	// 	require(isCastlePlaced(castleId) == true, "Castle not placed yet");
 
-		// Burn coin token.
-		WarCastleDetails.Details memory castle_detail;
-		castle_detail = WarCastleDetails.decode(contract_castle.getTokenDetails(castleId));
-		contract_coin.burnFrom(msg.sender, contract_design.getCastleMoveCost(castle_detail.rarity));
+	// 	// Burn coin token.
+	// 	WarCastleDetails.Details memory castle_detail;
+	// 	castle_detail = WarCastleDetails.decode(contract_castle.getTokenDetails(castleId));
+	// 	contract_coin.burnFrom(msg.sender, contract_design.getCastleMoveCost(castle_detail.rarity));
 
-		(int256 _x, int256 _y) = getCastlePosition(castleId);
-		totalCastlesInMap.decrement();
-		map_castles[_x][_y] = 0;
-		castle_map[castleId][0] = 0;
-		castle_map[castleId][1] = 0;
-	}
+	// 	(int256 _x, int256 _y) = getCastlePosition(castleId);
+	// 	totalCastlesInMap.decrement();
+	// 	map_castles[_x][_y] = 0;
+	// 	castle_map[castleId][0] = 0;
+	// 	castle_map[castleId][1] = 0;
+	// }
 
 	function getTotalCastlesInMap() public view returns (uint256) {
 		return totalCastlesInMap.current();
